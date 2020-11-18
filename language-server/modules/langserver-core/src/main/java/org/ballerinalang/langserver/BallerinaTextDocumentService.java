@@ -827,6 +827,7 @@ class BallerinaTextDocumentService implements TextDocumentService {
                 CommonUtil.getPathFromURI(fileUri);
                 SyntaxTree syntaxTree = docManager.getTree(formattingFilePath.get());
                 System.out.println(syntaxTree);
+//                LSDocumentIdentifier lsDocumentIdentifier = docManager.getLSDocument(formattingFilePath.get());
                 return FoldingRangeProvider.getFoldingRange(syntaxTree);
 
             } catch (UserErrorException  e) {
