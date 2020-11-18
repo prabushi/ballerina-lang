@@ -77,6 +77,8 @@ import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.DocumentRangeFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.FoldingRange;
+import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
@@ -92,6 +94,7 @@ import org.eclipse.lsp4j.TextDocumentPositionParams;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.wso2.ballerinalang.compiler.tree.BLangCompilationUnit;
 import org.wso2.ballerinalang.compiler.tree.BLangPackage;
@@ -803,6 +806,39 @@ class BallerinaTextDocumentService implements TextDocumentService {
             String msg = "Operation 'text/didClose' failed!";
             logError(msg, e, params.getTextDocument(), (Position) null);
         }
+    }
+
+    @JsonRequest
+    public CompletableFuture<List<FoldingRange>> foldingRange(FoldingRangeRequestParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            String fileUri = params.getTextDocument().getUri();
+            List<FoldingRange> foldingRangeList = new ArrayList<>();
+            FoldingRange foldingRange1 = new FoldingRange(2, 3);
+            foldingRange1.setKind("comment");
+            foldingRange1.setStartCharacter(1);
+            foldingRange1.setEndCharacter(3);
+            foldingRangeList.add(foldingRange1);
+
+            FoldingRange foldingRange2 = new FoldingRange(4, 7);
+            foldingRange2.setKind("region");
+            foldingRange2.setStartCharacter(26);
+            foldingRange2.setEndCharacter(0);
+            foldingRangeList.add(foldingRange2);
+
+            FoldingRange foldingRange3 = new FoldingRange(11, 12);
+            foldingRange3.setKind("region");
+            foldingRange3.setStartCharacter(12);
+            foldingRange3.setEndCharacter(15);
+            foldingRangeList.add(foldingRange3);
+
+            FoldingRange foldingRange4 = new FoldingRange(9, 10);
+            foldingRange4.setKind("region");
+            foldingRange4.setStartCharacter(0);
+            foldingRange4.setEndCharacter(20);
+            foldingRangeList.add(foldingRange4);
+
+            return foldingRangeList;
+        });
     }
 
     @Override
