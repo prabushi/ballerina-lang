@@ -50,6 +50,7 @@ import org.ballerinalang.langserver.diagnostic.DiagnosticsHelper;
 import org.ballerinalang.langserver.exception.UserErrorException;
 import org.ballerinalang.langserver.extensions.ballerina.semantichighlighter.HighlightingFailedException;
 import org.ballerinalang.langserver.extensions.ballerina.semantichighlighter.SemanticHighlightProvider;
+import org.ballerinalang.langserver.foldingrange.FoldingRangeProvider;
 import org.ballerinalang.langserver.hover.HoverUtil;
 import org.ballerinalang.langserver.signature.SignatureHelpUtil;
 import org.ballerinalang.langserver.symbols.SymbolFindingVisitor;
@@ -76,6 +77,8 @@ import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.DocumentRangeFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.FoldingRange;
+import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
@@ -91,6 +94,7 @@ import org.eclipse.lsp4j.TextDocumentPositionParams;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.wso2.ballerinalang.compiler.tree.BLangCompilationUnit;
 import org.wso2.ballerinalang.compiler.tree.BLangPackage;
@@ -804,6 +808,38 @@ class BallerinaTextDocumentService implements TextDocumentService {
             String msg = "Operation 'text/didClose' failed!";
             logError(msg, e, params.getTextDocument(), (Position) null);
         }
+    }
+
+    @JsonRequest
+    public CompletableFuture<List<FoldingRange>> foldingRange(FoldingRangeRequestParams params) {
+
+        return CompletableFuture.supplyAsync(() -> {
+            List<FoldingRange> emptyFoldingRangeList = new ArrayList<>();
+            String fileUri = params.getTextDocument().getUri();
+            Optional<Path> formattingFilePath = CommonUtil.getPathFromURI(fileUri);
+            // Note: If the source is a cached stdlib source or path does not exist, then return early and ignore
+            if (formattingFilePath.isEmpty() || CommonUtil.isCachedExternalSource(fileUri)) {
+                return emptyFoldingRangeList;
+            }
+            Path compilationPath = getUntitledFilePath(formattingFilePath.toString()).orElse(formattingFilePath.get());
+            Optional<Lock> lock = docManager.lockFile(compilationPath);
+            try {
+                CommonUtil.getPathFromURI(fileUri);
+                SyntaxTree syntaxTree = docManager.getTree(formattingFilePath.get());
+                System.out.println(syntaxTree);
+                return FoldingRangeProvider.getFoldingRange(syntaxTree);
+
+            } catch (UserErrorException  e) {
+                notifyUser("Formatting", e);
+                return emptyFoldingRangeList;
+            } catch (Throwable e) {
+                String msg = "Operation 'text/formatting' failed!";
+                logError(msg, e, params.getTextDocument(), (Position) null);
+                return emptyFoldingRangeList;
+            } finally {
+                lock.ifPresent(Lock::unlock);
+            }
+        });
     }
 
     @Override
