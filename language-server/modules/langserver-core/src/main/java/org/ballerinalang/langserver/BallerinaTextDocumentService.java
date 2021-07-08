@@ -15,6 +15,10 @@
  */
 package org.ballerinalang.langserver;
 
+import io.ballerina.compiler.syntax.tree.ModuleMemberDeclarationNode;
+import io.ballerina.compiler.syntax.tree.ModulePartNode;
+import io.ballerina.compiler.syntax.tree.NodeList;
+import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
 import io.ballerina.projects.Document;
 import io.ballerina.projects.Module;
@@ -76,12 +80,19 @@ import org.eclipse.lsp4j.PrepareRenameResult;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.RenameParams;
+import org.eclipse.lsp4j.SemanticTokens;
+import org.eclipse.lsp4j.SemanticTokensDelta;
+import org.eclipse.lsp4j.SemanticTokensDeltaParams;
+import org.eclipse.lsp4j.SemanticTokensParams;
+import org.eclipse.lsp4j.SemanticTokensRangeParams;
 import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.SignatureHelpParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
+import org.eclipse.lsp4j.adapters.SemanticTokensFullDeltaResponseAdapter;
+import org.eclipse.lsp4j.jsonrpc.json.ResponseJsonAdapter;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.services.TextDocumentService;
@@ -558,4 +569,159 @@ class BallerinaTextDocumentService implements TextDocumentService {
             }
         });
     }
+
+//    @JsonRequest(
+//            value = "textDocument/semanticTokens/full",
+//            useSegment = false
+//    )
+    @JsonRequest
+    public CompletableFuture<SemanticTokens> semanticTokensFull(SemanticTokensParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            String fileUri = params.getTextDocument().getUri();
+            Optional<Path> filePath = CommonUtil.getPathFromURI(fileUri);
+            if (filePath.isEmpty()) {
+                return null;
+            }
+            Optional<Document> document = this.workspaceManager.document(filePath.get());
+            if (document.isEmpty()) {
+                return null;
+            }
+            SyntaxTree syntaxTree = document.get().syntaxTree();
+            if (syntaxTree == null) {
+                return null;
+            }
+            ModulePartNode modulePartNode = syntaxTree.rootNode();
+            NodeList<ModuleMemberDeclarationNode> members = modulePartNode.members();
+            List<ModuleMemberDeclarationNode> functions = members.stream()
+                    .filter(member -> member.kind() == SyntaxKind.FUNCTION_DEFINITION)
+                    .collect(Collectors.toList());
+            List<Integer> data = new ArrayList<>();
+            for (ModuleMemberDeclarationNode fn : functions) {
+//                { line: 3, startChar: 10, length: 4, tokenType: "type", tokenModifiers: [] }
+                int line = fn.lineRange().startLine().line();
+                int startChar = fn.lineRange().startLine().offset();
+                int length = 1;
+                int tokenType = 12;
+                int tokenModifiers = 3; // 1 << MODIFIERS.indexOf(SemanticTokenModifiers.Declaration)
+                data.add(line);
+                data.add(startChar);
+                data.add(length);
+                data.add(tokenType);
+                data.add(tokenModifiers);
+            }
+
+//            data.add(2); // 2,5,3,0,3
+//            data.add(5);
+//            data.add(3);
+//            data.add(0);
+//            data.add(3);
+//            data.add(modulePartNode.position());
+            SemanticTokens semanticTokens = new SemanticTokens(data);
+            return semanticTokens;
+        });
+    }
+
+//    @JsonRequest(
+//            value = "textDocument/semanticTokens/full/delta",
+//            useSegment = false
+//    )
+//    @ResponseJsonAdapter(SemanticTokensFullDeltaResponseAdapter.class)
+    @JsonRequest
+    @ResponseJsonAdapter(SemanticTokensFullDeltaResponseAdapter.class)
+    public CompletableFuture<Either<SemanticTokens, SemanticTokensDelta>>
+            semanticTokensFullDelta(SemanticTokensDeltaParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            String fileUri = params.getTextDocument().getUri();
+            Optional<Path> filePath = CommonUtil.getPathFromURI(fileUri);
+            if (filePath.isEmpty()) {
+                return null;
+            }
+            Optional<Document> document = this.workspaceManager.document(filePath.get());
+            if (document.isEmpty()) {
+                return null;
+            }
+            SyntaxTree syntaxTree = document.get().syntaxTree();
+            if (syntaxTree == null) {
+                return null;
+            }
+            ModulePartNode modulePartNode = syntaxTree.rootNode();
+            NodeList<ModuleMemberDeclarationNode> members = modulePartNode.members();
+            List<ModuleMemberDeclarationNode> functions = members.stream()
+                    .filter(member -> member.kind() == SyntaxKind.FUNCTION_DEFINITION)
+                    .collect(Collectors.toList());
+            List<Integer> data = new ArrayList<>();
+            for (ModuleMemberDeclarationNode fn : functions) {
+//                { line: 3, startChar: 10, length: 4, tokenType: "type", tokenModifiers: [] }
+                int line = fn.lineRange().startLine().line();
+                int startChar = fn.lineRange().startLine().offset();
+                int length = 1;
+                int tokenType = 12;
+                int tokenModifiers = 3;
+                data.add(line);
+                data.add(startChar);
+                data.add(length);
+                data.add(tokenType);
+                data.add(tokenModifiers);
+            }
+            SemanticTokens semanticTokens = new SemanticTokens(data);
+            return Either.forLeft(semanticTokens);
+        });
+    }
+//
+//    @JsonRequest(
+//            value = "textDocument/semanticTokens/range",
+//            useSegment = false
+//    )
+    @JsonRequest
+    public CompletableFuture<SemanticTokens> semanticTokensRange(SemanticTokensRangeParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            String fileUri = params.getTextDocument().getUri();
+            Optional<Path> filePath = CommonUtil.getPathFromURI(fileUri);
+            if (filePath.isEmpty()) {
+                return null;
+            }
+            Optional<Document> document = this.workspaceManager.document(filePath.get());
+            if (document.isEmpty()) {
+                return null;
+            }
+            SyntaxTree syntaxTree = document.get().syntaxTree();
+            if (syntaxTree == null) {
+                return null;
+            }
+            ModulePartNode modulePartNode = syntaxTree.rootNode();
+            NodeList<ModuleMemberDeclarationNode> members = modulePartNode.members();
+            List<ModuleMemberDeclarationNode> functions = members.stream()
+                    .filter(member -> member.kind() == SyntaxKind.FUNCTION_DEFINITION)
+                    .collect(Collectors.toList());
+            List<Integer> data = new ArrayList<>();
+            for (ModuleMemberDeclarationNode fn : functions) {
+//                { line: 3, startChar: 10, length: 4, tokenType: "type", tokenModifiers: [] }
+                if (!isWithinRange(params.getRange(), fn.lineRange().startLine().line(),
+                        fn.lineRange().endLine().line(), fn.lineRange().startLine().offset(),
+                        fn.lineRange().endLine().offset())) {
+                    continue;
+                }
+                int line = fn.lineRange().startLine().line();
+                int startChar = fn.lineRange().startLine().offset();
+                int length = 1;
+                int tokenType = 12;
+                int tokenModifiers = 3;
+                data.add(line);
+                data.add(startChar);
+                data.add(length);
+                data.add(tokenType);
+                data.add(tokenModifiers);
+            }
+            SemanticTokens semanticTokens = new SemanticTokens(data);
+            return semanticTokens;
+        });
+    }
+
+    private static boolean isWithinRange(Range cursor, int startLine, int endLine, int startColumn, int endColumn) {
+        return (startLine < cursor.getStart().getLine() || startLine == cursor.getStart().getLine()
+                && startColumn < cursor.getStart().getCharacter()) &&
+                (endLine > cursor.getEnd().getLine() || endLine == cursor.getEnd().getLine()
+                        && endColumn > cursor.getEnd().getCharacter());
+    }
 }
+
