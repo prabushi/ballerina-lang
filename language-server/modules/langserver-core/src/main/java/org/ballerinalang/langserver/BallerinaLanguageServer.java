@@ -49,6 +49,7 @@ import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.Registration;
 import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.RenameOptions;
+import org.eclipse.lsp4j.SemanticTokensCapabilities;
 import org.eclipse.lsp4j.SemanticTokensLegend;
 import org.eclipse.lsp4j.SemanticTokensServerFull;
 import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions;
@@ -140,53 +141,15 @@ public class BallerinaLanguageServer extends AbstractExtendedLanguageServer
         res.getCapabilities().setFoldingRangeProvider(true);
         res.getCapabilities().setCodeLensProvider(new CodeLensOptions());
 
-        List<String> tokenTypes = new ArrayList<>(Arrays.asList(
-                "namespace",
-                "type",
-                "class",
-                "enum",
-                "interface",
-                "struct",
-                "typeParameter",
-                "parameter",
-                "variable",
-                "property",
-                "enumMember",
-                "event",
-                "function",
-                "method",
-                "macro",
-                "keyword",
-                "modifier",
-                "comment",
-                "string",
-                "number",
-                "regexp",
-                "operator"
-        ));
-        List<String> tokenModifiers = new ArrayList<>(Arrays.asList(
-                "declaration",
-                "definition",
-                "readonly",
-                "static",
-                "deprecated",
-                "abstract",
-                "async",
-                "modification",
-                "documentation",
-                "defaultLibrary"));
-        SemanticTokensLegend semanticTokensLegend = new SemanticTokensLegend(tokenTypes, tokenModifiers);
-//        SemanticTokensWithRegistrationOptions semanticTokensWithRegistrationOptions =
-//                new SemanticTokensWithRegistrationOptions(semanticTokensLegend);
+        // Set LS semantic token capabilities
+        SemanticTokensCapabilities semanticTokenCapabilities =
+                params.getCapabilities().getTextDocument().getSemanticTokens();
+        SemanticTokensLegend semanticTokensLegend = new SemanticTokensLegend(semanticTokenCapabilities.getTokenTypes(),
+                semanticTokenCapabilities.getTokenModifiers());
+        SemanticTokensServerFull serverFull = new SemanticTokensServerFull(false);
         SemanticTokensWithRegistrationOptions semanticTokensWithRegistrationOptions =
-                new SemanticTokensWithRegistrationOptions();
-        SemanticTokensServerFull serverFull = new SemanticTokensServerFull();
-        serverFull.setDelta(false); //delta false for the moment
-        semanticTokensWithRegistrationOptions.setLegend(semanticTokensLegend);
-        semanticTokensWithRegistrationOptions.setFull(serverFull);
+                new SemanticTokensWithRegistrationOptions(semanticTokensLegend, serverFull);
         res.getCapabilities().setSemanticTokensProvider(semanticTokensWithRegistrationOptions);
-//        SemanticTokensWithRegistrationOptions options = new SemanticTokensWithRegistrationOptions();
-//        params.getCapabilities().getTextDocument().getSemanticTokens();
 
         // Check and set prepare rename provider
         if (Boolean.TRUE.equals(params.getCapabilities().getTextDocument().getRename().getPrepareSupport())) {
@@ -212,12 +175,6 @@ public class BallerinaLanguageServer extends AbstractExtendedLanguageServer
 
 
         TextDocumentClientCapabilities textDocClientCapabilities = params.getCapabilities().getTextDocument();
-//        SemanticTokensClientCapabilitiesRequests semanticTokensClientCapabilitiesRequests =
-//                new SemanticTokensClientCapabilitiesRequests(true);
-//        SemanticTokensCapabilities semanticTokensCapabilities =
-//                new SemanticTokensCapabilities(true, semanticTokensClientCapabilitiesRequests, tokenTypes,
-//                        tokenModifiers, null);
-//        textDocClientCapabilities.setSemanticTokens(semanticTokensCapabilities);
         WorkspaceClientCapabilities workspaceClientCapabilities = params.getCapabilities().getWorkspace();
         LSClientCapabilities capabilities = new LSClientCapabilitiesImpl(textDocClientCapabilities,
                 workspaceClientCapabilities,
