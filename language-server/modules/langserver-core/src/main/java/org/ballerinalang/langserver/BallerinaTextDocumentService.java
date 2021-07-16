@@ -35,6 +35,7 @@ import org.ballerinalang.langserver.commons.LanguageServerContext;
 import org.ballerinalang.langserver.commons.PrepareRenameContext;
 import org.ballerinalang.langserver.commons.ReferencesContext;
 import org.ballerinalang.langserver.commons.RenameContext;
+import org.ballerinalang.langserver.commons.SemanticTokensContext;
 import org.ballerinalang.langserver.commons.SignatureContext;
 import org.ballerinalang.langserver.commons.capability.LSClientCapabilities;
 import org.ballerinalang.langserver.commons.workspace.WorkspaceManager;
@@ -43,8 +44,8 @@ import org.ballerinalang.langserver.contexts.ContextBuilder;
 import org.ballerinalang.langserver.diagnostic.DiagnosticsHelper;
 import org.ballerinalang.langserver.exception.UserErrorException;
 import org.ballerinalang.langserver.foldingrange.FoldingRangeProvider;
-import org.ballerinalang.langserver.highlighting.SemanticTokenVisitor;
 import org.ballerinalang.langserver.hover.HoverUtil;
+import org.ballerinalang.langserver.semantictokens.SemanticTokensProvider;
 import org.ballerinalang.langserver.signature.SignatureHelpUtil;
 import org.ballerinalang.langserver.util.definition.DefinitionUtil;
 import org.ballerinalang.langserver.util.references.ReferencesUtil;
@@ -565,36 +566,21 @@ class BallerinaTextDocumentService implements TextDocumentService {
 
     @JsonRequest
     public CompletableFuture<SemanticTokens> semanticTokensFull(SemanticTokensParams params) {
-
         return CompletableFuture.supplyAsync(() -> {
-            List<Integer> data = new ArrayList<>();
-            if (!LSClientConfigHolder.getInstance(serverContext).getConfig().isEnableSemanticHighlighting()) {
-                return new SemanticTokens(data);
+            try {
+                if (!LSClientConfigHolder.getInstance(serverContext).getConfig().isEnableSemanticHighlighting()) {
+                    return new SemanticTokens(new ArrayList<>());
+                }
+                SemanticTokensContext semanticTokensContext = ContextBuilder.buildSemanticTokensContext(
+                        params.getTextDocument().getUri(), this.workspaceManager, this.serverContext);
+                return new SemanticTokensProvider(semanticTokensContext).getSemanticTokens();
+            } catch (Throwable e) {
+                String msg = "Operation 'textDocument/semanticTokens/full' failed!";
+                this.clientLogger.logError(LSContextOperation.TXT_SEMANTIC_TOKENS_FULL, msg, e,
+                        new TextDocumentIdentifier(params.getTextDocument().getUri()),
+                        (Position) null);
+                return new SemanticTokens(new ArrayList<>());
             }
-            String fileUri = params.getTextDocument().getUri();
-            Optional<Path> filePath = CommonUtil.getPathFromURI(fileUri);
-            if (filePath.isEmpty()) {
-                return new SemanticTokens(data);
-            }
-            Optional<Module> module = this.workspaceManager.module(filePath.get());
-            if (module.isEmpty()) {
-                return new SemanticTokens(data);
-            }
-
-            Optional<Document> document = this.workspaceManager.document(filePath.get());
-            if (document.isEmpty()) {
-                return new SemanticTokens(data);
-            }
-            SyntaxTree syntaxTree = document.get().syntaxTree();
-            if (syntaxTree == null) {
-                return new SemanticTokens(data);
-            }
-            // TODO: context
-            SemanticTokenVisitor semanticTokenVisitor = new SemanticTokenVisitor(data,
-                    module.get().getCompilation().getSemanticModel(), document.get(),
-                    fileUri.substring(fileUri.lastIndexOf('/') + 1));
-            semanticTokenVisitor.visitSemanticTokens(syntaxTree.rootNode());
-            return new SemanticTokens(data);
         });
     }
 }
