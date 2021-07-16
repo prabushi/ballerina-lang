@@ -38,7 +38,6 @@ import io.ballerina.compiler.syntax.tree.SimpleNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.compiler.syntax.tree.TypeDefinitionNode;
-import io.ballerina.tools.diagnostics.Location;
 import io.ballerina.tools.text.LinePosition;
 
 import java.util.Comparator;
@@ -84,13 +83,13 @@ public class SemanticTokensVisitor extends NodeVisitor {
     private SemanticToken previousToken;
     // sorted
     private final Set<SemanticToken> semanticTokens;
-    private final SemanticTokensProvider semanticTokensProvider;
+    private final SemanticTokensHandler semanticTokensHandler;
 
-    public SemanticTokensVisitor(List<Integer> data, SemanticTokensProvider semanticTokensProvider) {
+    public SemanticTokensVisitor(List<Integer> data, SemanticTokensHandler semanticTokensHandler) {
 
         this.data = data;
         this.semanticTokens = new TreeSet<>(SemanticToken.semanticTokenComparator);
-        this.semanticTokensProvider = semanticTokensProvider;
+        this.semanticTokensHandler = semanticTokensHandler;
     }
 
     public void visitSemanticTokens(Node node) {
@@ -259,7 +258,7 @@ public class SemanticTokensVisitor extends NodeVisitor {
 
         SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
         if (!semanticTokens.contains(semanticToken)) {
-            Optional<Symbol> symbol = this.semanticTokensProvider.getSemanticModelSymbol(node);
+            Optional<Symbol> symbol = this.semanticTokensHandler.getSemanticModelSymbol(node);
             if (symbol.isPresent()) {
                 SymbolKind kind = symbol.get().kind();
                 String nodeName = node.toString().trim();
@@ -267,11 +266,7 @@ public class SemanticTokensVisitor extends NodeVisitor {
                 int modifiers = -1;
                 switch (kind) {
                     case CLASS:
-                        if (nodeName.equals(SELF)) {
-                            type = TokenTypes.KEYWORD.value;
-                        } else {
-                            type = TokenTypes.CLASS.value;
-                        }
+                        type = nodeName.equals(SELF) ? TokenTypes.KEYWORD.value : TokenTypes.CLASS.value;
                         break;
                     case CLASS_FIELD:
                         type = TokenTypes.PROPERTY.value;
@@ -281,11 +276,7 @@ public class SemanticTokensVisitor extends NodeVisitor {
                         modifiers = TypeModifiers.READONLY.value;
                         break;
                     case VARIABLE:
-                        if (nodeName.equals(SELF)) {
-                            type = TokenTypes.KEYWORD.value;
-                        } else {
-                            type = TokenTypes.VARIABLE.value;
-                        }
+                        type = nodeName.equals(SELF) ? TokenTypes.KEYWORD.value : TokenTypes.VARIABLE.value;
                         break;
                     case TYPE:
                     case RECORD_FIELD:
@@ -354,8 +345,7 @@ public class SemanticTokensVisitor extends NodeVisitor {
 
     private void handleReferences(LinePosition linePosition, int length, int type, int modifiers) {
 
-        List<Location> locations = this.semanticTokensProvider.getSemanticModelReferences(linePosition);
-        locations.forEach(location -> {
+        this.semanticTokensHandler.getSemanticModelReferences(linePosition).forEach(location -> {
             LinePosition position = location.lineRange().startLine();
             SemanticToken semanticToken = new SemanticToken(position.line(), position.offset());
             if (!semanticTokens.contains(semanticToken)) {
@@ -421,17 +411,16 @@ public class SemanticTokensVisitor extends NodeVisitor {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object obj) {
 
-            if (this == o) {
+            if (this == obj) {
                 return true;
             }
-            if (o == null || getClass() != o.getClass()) {
+            if (obj == null || getClass() != obj.getClass()) {
                 return false;
             }
-            SemanticToken that = (SemanticToken) o;
-            return line == that.line &&
-                    column == that.column;
+            SemanticToken semanticToken = (SemanticToken) obj;
+            return line == semanticToken.line && column == semanticToken.column;
         }
 
         @Override
@@ -441,12 +430,12 @@ public class SemanticTokensVisitor extends NodeVisitor {
         }
 
         @Override
-        public int compareTo(SemanticToken o) {
+        public int compareTo(SemanticToken semanticToken) {
 
-            if (this.line == o.line) {
-                return this.column - o.column;
+            if (this.line == semanticToken.line) {
+                return this.column - semanticToken.column;
             }
-            return this.line - o.line;
+            return this.line - semanticToken.line;
         }
 
         public static Comparator<SemanticToken> semanticTokenComparator = SemanticToken::compareTo;

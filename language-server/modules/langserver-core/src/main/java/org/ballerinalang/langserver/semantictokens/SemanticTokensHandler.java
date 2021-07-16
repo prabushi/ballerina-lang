@@ -36,14 +36,14 @@ import java.util.stream.Collectors;
 /**
  * Semantic tokens provider class.
  */
-public class SemanticTokensProvider {
+public class SemanticTokensHandler {
 
     private final SemanticTokensContext semanticTokensContext;
     private SemanticModel semanticModel = null;
     private Document document = null;
     private Path filePath = null;
 
-    public SemanticTokensProvider(SemanticTokensContext semanticTokensContext) {
+    public SemanticTokensHandler(SemanticTokensContext semanticTokensContext) {
 
         this.semanticTokensContext = semanticTokensContext;
     }
@@ -98,9 +98,8 @@ public class SemanticTokensProvider {
         if (path == null) {
             return new ArrayList<>();
         }
-        String fileName = path.toString();
         return this.semanticModel.references(this.document, linePosition).stream().filter(location ->
-                location.lineRange().filePath().equals(fileName)).collect(Collectors.toList());
+                location.lineRange().filePath().equals(path.toString())).collect(Collectors.toList());
     }
 
     public Optional<Symbol> getSemanticModelSymbol(Node node) {

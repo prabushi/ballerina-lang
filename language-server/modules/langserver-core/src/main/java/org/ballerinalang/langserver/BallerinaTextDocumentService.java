@@ -45,7 +45,7 @@ import org.ballerinalang.langserver.diagnostic.DiagnosticsHelper;
 import org.ballerinalang.langserver.exception.UserErrorException;
 import org.ballerinalang.langserver.foldingrange.FoldingRangeProvider;
 import org.ballerinalang.langserver.hover.HoverUtil;
-import org.ballerinalang.langserver.semantictokens.SemanticTokensProvider;
+import org.ballerinalang.langserver.semantictokens.SemanticTokensHandler;
 import org.ballerinalang.langserver.signature.SignatureHelpUtil;
 import org.ballerinalang.langserver.util.definition.DefinitionUtil;
 import org.ballerinalang.langserver.util.references.ReferencesUtil;
@@ -573,7 +573,7 @@ class BallerinaTextDocumentService implements TextDocumentService {
                 }
                 SemanticTokensContext semanticTokensContext = ContextBuilder.buildSemanticTokensContext(
                         params.getTextDocument().getUri(), this.workspaceManager, this.serverContext);
-                return new SemanticTokensProvider(semanticTokensContext).getSemanticTokens();
+                return new SemanticTokensHandler(semanticTokensContext).getSemanticTokens();
             } catch (Throwable e) {
                 String msg = "Operation 'textDocument/semanticTokens/full' failed!";
                 this.clientLogger.logError(LSContextOperation.TXT_SEMANTIC_TOKENS_FULL, msg, e,
