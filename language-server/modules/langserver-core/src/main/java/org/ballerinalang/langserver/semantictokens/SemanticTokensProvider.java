@@ -100,47 +100,7 @@ public class SemanticTokensProvider {
         }
         String fileName = path.toString();
         return this.semanticModel.references(this.document, linePosition).stream().filter(location ->
-            location.lineRange().filePath().equals(fileName)).collect(Collectors.toList());
-//        List<Location> locations = this.semanticModel.references(this.document, linePosition);
-//        return locations.stream().filter(location -> {
-//            return this.filePath.getFileName() != null && this.filePath
-//                    .getFileName()
-//                    .toString() != null &&
-//                    this.filePath
-//                            .getFileName()
-//                            .toString()
-//                            .equals(
-//                                    location
-//                                            .lineRange()
-//                                            .filePath()
-//                            );
-//                }
-//        )
-//                .collect(Collectors.toList());
-
-//        for (int i = 0; i < locations.size(); i++) {
-//            Location location = locations.get(i);
-//            if (this.filePath.getFileName() != null &&
-//                    !this.filePath.getFileName()
-//                        .toString()
-//                        .equals(
-//                                location.lineRange()
-//                                        .filePath())) {
-//                    locations.remove(location);
-//                }
-//        }
-//        locations.forEach(location -> {
-//
-//            }
-//        });
-
-//        return locations;
-        // this.filePath.getFileName().toString()
-//        return locations.stream().filter(location -> {
-//            location.lineRange().filePath();
-//            this.filePath.getFileName();
-//            return false;
-//        }).collect(Collectors.toList());
+                location.lineRange().filePath().equals(fileName)).collect(Collectors.toList());
     }
 
     public Optional<Symbol> getSemanticModelSymbol(Node node) {

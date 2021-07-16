@@ -24,12 +24,10 @@ import io.ballerina.compiler.syntax.tree.ConstantDeclarationNode;
 import io.ballerina.compiler.syntax.tree.EnumDeclarationNode;
 import io.ballerina.compiler.syntax.tree.EnumMemberNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
-import io.ballerina.compiler.syntax.tree.IdentifierToken;
 import io.ballerina.compiler.syntax.tree.ImportDeclarationNode;
 import io.ballerina.compiler.syntax.tree.ImportPrefixNode;
 import io.ballerina.compiler.syntax.tree.MarkdownParameterDocumentationLineNode;
 import io.ballerina.compiler.syntax.tree.Node;
-import io.ballerina.compiler.syntax.tree.NodeList;
 import io.ballerina.compiler.syntax.tree.NodeVisitor;
 import io.ballerina.compiler.syntax.tree.ObjectFieldNode;
 import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
@@ -42,10 +40,7 @@ import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.compiler.syntax.tree.TypeDefinitionNode;
 import io.ballerina.tools.diagnostics.Location;
 import io.ballerina.tools.text.LinePosition;
-import org.eclipse.lsp4j.SemanticTokenModifiers;
-import org.eclipse.lsp4j.SemanticTokenTypes;
 
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -58,22 +53,32 @@ import java.util.TreeSet;
  */
 public class SemanticTokensVisitor extends NodeVisitor {
 
-    private static final List<String> TOKEN_TYPES = Arrays.asList(
-            SemanticTokenTypes.Namespace, SemanticTokenTypes.Type, SemanticTokenTypes.Class, SemanticTokenTypes.Enum,
-            SemanticTokenTypes.Interface, SemanticTokenTypes.Struct, SemanticTokenTypes.TypeParameter,
-            SemanticTokenTypes.Parameter, SemanticTokenTypes.Variable, SemanticTokenTypes.Property,
-            SemanticTokenTypes.EnumMember, SemanticTokenTypes.Event, SemanticTokenTypes.Function,
-            SemanticTokenTypes.Method, SemanticTokenTypes.Macro, SemanticTokenTypes.Keyword,
-            SemanticTokenTypes.Modifier, SemanticTokenTypes.Comment, SemanticTokenTypes.String,
-            SemanticTokenTypes.Number, SemanticTokenTypes.Regexp, SemanticTokenTypes.Operator
-    );
+    private static final String SELF = "self";
 
-    private static final List<String> TOKEN_MODIFIERS = Arrays.asList(
-            SemanticTokenModifiers.Declaration, SemanticTokenModifiers.Definition, SemanticTokenModifiers.Readonly,
-            SemanticTokenModifiers.Static, SemanticTokenModifiers.Deprecated, SemanticTokenModifiers.Abstract,
-            SemanticTokenModifiers.Async, SemanticTokenModifiers.Modification, SemanticTokenModifiers.Documentation,
-            SemanticTokenModifiers.DefaultLibrary
-    );
+    private enum TokenTypes {
+        NAMESPACE(0), TYPE(1), CLASS(2), ENUM(3), INTERFACE(4), STRUCT(5),
+        TYPE_PARAMETER(6), PARAMETER(7), VARIABLE(8), PROPERTY(9), ENUM_MEMBER(10),
+        EVENT(11), FUNCTION(12), METHOD(13), MACRO(14), KEYWORD(15), MODIFIER(16),
+        COMMENT(17), STRING(18), NUMBER(19), REGXP(20), OPERATOR(21);
+
+        private final int value;
+
+        TokenTypes(int value) {
+
+            this.value = value;
+        }
+    }
+
+    private enum TypeModifiers {
+        DECLARATION(1), DEFINITION(1 << 1), READONLY(1 << 2), STATIC(1 << 3), DEPRECATED(1 << 4),
+        ABSTRACT(1 << 5), ASYNC(1 << 6), MODIFICATION(1 << 7), DOCUMENTATION(1 << 8), DEFAULT_LIBRARY(1 << 9);
+        private final int value;
+
+        TypeModifiers(int value) {
+
+            this.value = value;
+        }
+    }
 
     private final List<Integer> data;
     private SemanticToken previousToken;
@@ -97,19 +102,8 @@ public class SemanticTokensVisitor extends NodeVisitor {
     public void visit(ImportDeclarationNode importDeclarationNode) {
 
         Optional<ImportPrefixNode> importPrefixNode = importDeclarationNode.prefix();
-        if (importPrefixNode.isPresent()) {
-            Token token = importPrefixNode.get().prefix();
-            LinePosition startLine = token.lineRange().startLine();
-            SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-            if (!semanticTokens.contains(semanticToken)) {
-                int length = token.text().length();
-                semanticToken.setLength(length);
-                semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Namespace));
-                semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-                semanticTokens.add(semanticToken);
-                handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Namespace), 0);
-            }
-        }
+        importPrefixNode.ifPresent(prefixNode -> this.addSemanticToken(prefixNode.prefix(), TokenTypes.NAMESPACE.value,
+                TypeModifiers.DECLARATION.value, true, TokenTypes.NAMESPACE.value, 0));
         visitSyntaxNode(importDeclarationNode);
     }
 
@@ -119,22 +113,18 @@ public class SemanticTokensVisitor extends NodeVisitor {
         SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
         if (!semanticTokens.contains(semanticToken)) {
             int length = functionDefinitionNode.functionName().text().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Function));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
+            semanticToken.setProperties(length, TokenTypes.FUNCTION.value, TypeModifiers.DECLARATION.value);
             semanticTokens.add(semanticToken);
-            if (functionDefinitionNode.kind() != SyntaxKind.RESOURCE_ACCESSOR_DEFINITION) {
-                handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Function), 0);
-            }
+
             if (functionDefinitionNode.kind() == SyntaxKind.RESOURCE_ACCESSOR_DEFINITION) {
-                NodeList<Node> resourcePaths = functionDefinitionNode.relativeResourcePath();
-                resourcePaths.forEach(resourcePath -> {
+                functionDefinitionNode.relativeResourcePath().forEach(resourcePath -> {
                     SemanticToken resourcePathToken = new SemanticToken(resourcePath.lineRange().startLine().line(),
                             resourcePath.lineRange().startLine().offset(), resourcePath.toString().trim().length(),
-                            TOKEN_TYPES.indexOf(SemanticTokenTypes.Function),
-                            1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
+                            TokenTypes.FUNCTION.value, TypeModifiers.DECLARATION.value);
                     semanticTokens.add(resourcePathToken);
                 });
+            } else {
+                handleReferences(startLine, length, TokenTypes.FUNCTION.value, 0);
             }
         }
         visitSyntaxNode(functionDefinitionNode);
@@ -142,98 +132,50 @@ public class SemanticTokensVisitor extends NodeVisitor {
 
     public void visit(RequiredParameterNode requiredParameterNode) {
 
-        if (requiredParameterNode.paramName().isPresent()) {
-            Token token = requiredParameterNode.paramName().get();
-            LinePosition startLine = token.lineRange().startLine();
-            SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-            if (!semanticTokens.contains(semanticToken)) {
-                int length = token.toString().trim().length();
-                semanticToken.setLength(length);
-                semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Parameter));
-                semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-                semanticTokens.add(semanticToken);
-                handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Parameter), 0);
-            }
-        }
+        requiredParameterNode.paramName().ifPresent(token -> this.addSemanticToken(token, TokenTypes.PARAMETER.value,
+                TypeModifiers.DECLARATION.value, true, TokenTypes.PARAMETER.value, 0));
         visitSyntaxNode(requiredParameterNode);
     }
 
     public void visit(CaptureBindingPatternNode captureBindingPatternNode) {
 
-        LinePosition startLine = captureBindingPatternNode.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = captureBindingPatternNode.toString().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable), 0);
-        }
+        this.addSemanticToken(captureBindingPatternNode, TokenTypes.VARIABLE.value, TypeModifiers.DECLARATION.value,
+                true, TokenTypes.VARIABLE.value, 0);
         visitSyntaxNode(captureBindingPatternNode);
     }
 
     public void visit(SimpleNameReferenceNode simpleNameReferenceNode) {
 
-        LinePosition startLine = simpleNameReferenceNode.lineRange().startLine();
-        processWithSymbolsAPI(simpleNameReferenceNode, startLine);
+        processSymbols(simpleNameReferenceNode, simpleNameReferenceNode.lineRange().startLine());
         visitSyntaxNode(simpleNameReferenceNode);
     }
 
     public void visit(QualifiedNameReferenceNode qualifiedNameReferenceNode) {
 
-        Token token = qualifiedNameReferenceNode.modulePrefix();
-        LinePosition linePosition = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(linePosition.line(), linePosition.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.text().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Namespace));
-            semanticToken.setModifiers(0);
-            this.semanticTokens.add(semanticToken);
-        }
+        this.addSemanticToken(qualifiedNameReferenceNode.modulePrefix(),
+                TokenTypes.NAMESPACE.value, 0, false, -1, -1);
+
         Token identifier = qualifiedNameReferenceNode.identifier();
-        LinePosition identifierPosition = identifier.lineRange().startLine();
-        SemanticToken identifierSemanticToken = new SemanticToken(identifierPosition.line(),
-                identifierPosition.offset());
+        LinePosition position = identifier.lineRange().startLine();
+        SemanticToken identifierSemanticToken = new SemanticToken(position.line(), position.offset());
         if (!semanticTokens.contains(identifierSemanticToken)) {
-            processWithSymbolsAPI(identifier, identifierPosition);
+            processSymbols(identifier, position);
         }
         visitSyntaxNode(qualifiedNameReferenceNode);
     }
 
     public void visit(ConstantDeclarationNode constantDeclarationNode) {
 
-        Token token = constantDeclarationNode.variableName();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.toString().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration)
-                    | 1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable),
-                    1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-        }
-
+        this.addSemanticToken(constantDeclarationNode.variableName(), TokenTypes.VARIABLE.value,
+                TypeModifiers.DECLARATION.value | TypeModifiers.READONLY.value, true, TokenTypes.VARIABLE.value,
+                TypeModifiers.READONLY.value);
         visitSyntaxNode(constantDeclarationNode);
     }
 
     public void visit(ClassDefinitionNode classDefinitionNode) {
 
-        Token token = classDefinitionNode.className();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.text().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Class));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Class), 0);
-        }
+        this.addSemanticToken(classDefinitionNode.className(), TokenTypes.CLASS.value, TypeModifiers.DECLARATION.value,
+                true, TokenTypes.CLASS.value, 0);
         visitSyntaxNode(classDefinitionNode);
     }
 
@@ -242,8 +184,7 @@ public class SemanticTokensVisitor extends NodeVisitor {
         serviceDeclarationNode.absoluteResourcePath().forEach(serviceName -> {
             LinePosition startLine = serviceName.lineRange().startLine();
             SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset(),
-                    serviceName.toString().trim().length(), TOKEN_TYPES.indexOf(SemanticTokenTypes.Type),
-                    1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
+                    serviceName.toString().trim().length(), TokenTypes.TYPE.value, TypeModifiers.DECLARATION.value);
             semanticTokens.add(semanticToken);
         });
         visitSyntaxNode(serviceDeclarationNode);
@@ -251,60 +192,30 @@ public class SemanticTokensVisitor extends NodeVisitor {
 
     public void visit(EnumDeclarationNode enumDeclarationNode) {
 
-        Node token = enumDeclarationNode.identifier();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset(),
-                token.toString().trim().length(), TOKEN_TYPES.indexOf(SemanticTokenTypes.Enum),
-                1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-        semanticTokens.add(semanticToken);
+        this.addSemanticToken(enumDeclarationNode.identifier(), TokenTypes.ENUM.value, TypeModifiers.DECLARATION.value,
+                false, -1, -1);
         visitSyntaxNode(enumDeclarationNode);
     }
 
     public void visit(EnumMemberNode enumMemberNode) {
 
-        IdentifierToken token = enumMemberNode.identifier();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.text().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.EnumMember));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration)
-                    | 1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.EnumMember),
-                    1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-        }
+        this.addSemanticToken(enumMemberNode.identifier(), TokenTypes.ENUM_MEMBER.value,
+                TypeModifiers.DECLARATION.value | TypeModifiers.READONLY.value, true, TokenTypes.ENUM_MEMBER.value,
+                TypeModifiers.READONLY.value);
         visitSyntaxNode(enumMemberNode);
     }
 
     public void visit(MarkdownParameterDocumentationLineNode markdownParameterDocumentationLineNode) {
 
-        Node token = markdownParameterDocumentationLineNode.parameterName();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            semanticToken.setLength(token.toString().length());
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Parameter));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Documentation));
-            semanticTokens.add(semanticToken);
-        }
+        this.addSemanticToken(markdownParameterDocumentationLineNode.parameterName(), TokenTypes.PARAMETER.value,
+                TypeModifiers.DOCUMENTATION.value, false, -1, -1);
         visitSyntaxNode(markdownParameterDocumentationLineNode);
     }
 
     public void visit(TypeDefinitionNode typeDefinitionNode) {
 
-        Token token = typeDefinitionNode.typeName();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.toString().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Type));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Type), 0);
-        }
+        this.addSemanticToken(typeDefinitionNode.typeName(), TokenTypes.TYPE.value, TypeModifiers.DECLARATION.value,
+                true, TokenTypes.TYPE.value, 0);
         visitSyntaxNode(typeDefinitionNode);
     }
 
@@ -314,20 +225,19 @@ public class SemanticTokensVisitor extends NodeVisitor {
         LinePosition startLine = token.lineRange().startLine();
         SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
         if (!semanticTokens.contains(semanticToken)) {
-            int length = token.toString().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.TypeParameter));
+            int length = token.text().trim().length();
+            int modifiers;
+            int refModifiers;
             if (recordFieldNode.readonlyKeyword().isPresent()) {
-                semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration)
-                        | 1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-                semanticTokens.add(semanticToken);
-                handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.TypeParameter),
-                        1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
+                modifiers = TypeModifiers.DECLARATION.value | TypeModifiers.READONLY.value;
+                refModifiers = TypeModifiers.READONLY.value;
             } else {
-                semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-                semanticTokens.add(semanticToken);
-                handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.TypeParameter), 0);
+                modifiers = TypeModifiers.DECLARATION.value;
+                refModifiers = 0;
             }
+            semanticToken.setProperties(length, TokenTypes.TYPE_PARAMETER.value, modifiers);
+            semanticTokens.add(semanticToken);
+            handleReferences(startLine, length, TokenTypes.TYPE_PARAMETER.value, refModifiers);
         }
         visitSyntaxNode(recordFieldNode);
     }
@@ -337,23 +247,15 @@ public class SemanticTokensVisitor extends NodeVisitor {
         visitSyntaxNode(annotationNode);
     }
 
+    //public int age;
     public void visit(ObjectFieldNode objectFieldNode) {
-        //public int age;
-        Token token = objectFieldNode.fieldName();
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.toString().trim().length();
-            semanticToken.setLength(length);
-            semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Property));
-            semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Declaration));
-            semanticTokens.add(semanticToken);
-            handleReferences(startLine, length, TOKEN_TYPES.indexOf(SemanticTokenTypes.Property), 0);
-        }
+
+        this.addSemanticToken(objectFieldNode.fieldName(), TokenTypes.PROPERTY.value, TypeModifiers.DECLARATION.value,
+                true, TokenTypes.PROPERTY.value, 0);
         visitSyntaxNode(objectFieldNode);
     }
 
-    private void processWithSymbolsAPI(Node node, LinePosition startLine) {
+    private void processSymbols(Node node, LinePosition startLine) {
 
         SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
         if (!semanticTokens.contains(semanticToken)) {
@@ -361,56 +263,91 @@ public class SemanticTokensVisitor extends NodeVisitor {
             if (symbol.isPresent()) {
                 SymbolKind kind = symbol.get().kind();
                 String nodeName = node.toString().trim();
-                semanticToken.setLength(nodeName.length());
-                if (kind == SymbolKind.CLASS) {
-                    if (nodeName.equals("self")) {
-                        semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Keyword));
-                    } else {
-                        semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Class));
-                    }
-                    semanticToken.setModifiers(0);
-                } else if (kind == SymbolKind.CLASS_FIELD) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Property));
-                    semanticToken.setModifiers(0);
-                } else if (kind == SymbolKind.CONSTANT) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable));
-                    semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-                } else if (kind == SymbolKind.VARIABLE) {
-                    if (nodeName.equals("self")) {
-                        semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Keyword));
-                        semanticToken.setModifiers(0);
-                    } else {
-                        semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Variable));
-                        semanticToken.setModifiers(0);
-                    }
-                } else if (kind == SymbolKind.TYPE || kind == SymbolKind.RECORD_FIELD) {
-//                        || symbol.get() instanceof TypeReferenceTypeSymbol
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Type));
-                    semanticToken.setModifiers(0);
-                } else if (kind == SymbolKind.ENUM_MEMBER) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.EnumMember));
-                    semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Readonly));
-                } else if (kind == SymbolKind.PARAMETER) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Parameter));
-                    semanticToken.setModifiers(0);
-                } else if (kind == SymbolKind.FUNCTION) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Function));
-                    semanticToken.setModifiers(0);
-                } else if (kind == SymbolKind.ANNOTATION) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Keyword));
-//                    if (nodeName.equals("deprecated")) {
-//                        semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.Deprecated));
-//                    } else {
-                    semanticToken.setModifiers(0);
-//                    }
-                } else if (kind == SymbolKind.METHOD) {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Method));
-                    semanticToken.setModifiers(0);
-                } else {
-                    semanticToken.setType(TOKEN_TYPES.indexOf(SemanticTokenTypes.Type)); // TODO
-                    semanticToken.setModifiers(1 << TOKEN_MODIFIERS.indexOf(SemanticTokenModifiers.DefaultLibrary));
+                int type = -1;
+                int modifiers = -1;
+                switch (kind) {
+                    case CLASS:
+                        if (nodeName.equals(SELF)) {
+                            type = TokenTypes.KEYWORD.value;
+                        } else {
+                            type = TokenTypes.CLASS.value;
+                        }
+                        modifiers = 0;
+                        break;
+                    case CLASS_FIELD:
+                        type = TokenTypes.PROPERTY.value;
+                        modifiers = 0;
+                        break;
+                    case CONSTANT:
+                        type = TokenTypes.VARIABLE.value;
+                        modifiers = TypeModifiers.READONLY.value;
+                        break;
+                    case VARIABLE:
+                        if (nodeName.equals(SELF)) {
+                            type = TokenTypes.KEYWORD.value;
+                        } else {
+                            type = TokenTypes.VARIABLE.value;
+                        }
+                        modifiers = 0;
+                        break;
+                    case TYPE:
+                    case RECORD_FIELD:
+                        type = TokenTypes.TYPE.value;
+                        modifiers = 0;
+                        break;
+                    case ENUM_MEMBER:
+                        type = TokenTypes.ENUM_MEMBER.value;
+                        modifiers = TypeModifiers.READONLY.value;
+                        break;
+                    case PARAMETER:
+                        type = TokenTypes.PARAMETER.value;
+                        modifiers = 0;
+                        break;
+                    case FUNCTION:
+                        type = TokenTypes.FUNCTION.value;
+                        modifiers = 0;
+                        break;
+                    case METHOD:
+                        type = TokenTypes.METHOD.value;
+                        modifiers = 0;
+                        break;
+                    default:
+                        break;
                 }
-                semanticTokens.add(semanticToken);
+                if (type != -1 && modifiers != -1) {
+                    semanticToken.setProperties(nodeName.length(), type, modifiers);
+                    semanticTokens.add(semanticToken);
+                }
+            }
+        }
+    }
+
+    private void addSemanticToken(Token token, int type, int modifiers, boolean processReferences, int refType,
+                                  int refModifiers) {
+
+        LinePosition startLine = token.lineRange().startLine();
+        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
+        if (!semanticTokens.contains(semanticToken)) {
+            int length = token.text().trim().length();
+            semanticToken.setProperties(length, type, modifiers);
+            semanticTokens.add(semanticToken);
+            if (processReferences) {
+                handleReferences(startLine, length, refType, refModifiers);
+            }
+        }
+    }
+
+    private void addSemanticToken(Node node, int type, int modifiers, boolean processReferences, int refType,
+                                  int refModifiers) {
+
+        LinePosition startLine = node.lineRange().startLine();
+        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
+        if (!semanticTokens.contains(semanticToken)) {
+            int length = node.toString().trim().length();
+            semanticToken.setProperties(length, type, modifiers);
+            semanticTokens.add(semanticToken);
+            if (processReferences) {
+                handleReferences(startLine, length, refType, refModifiers);
             }
         }
     }
@@ -438,19 +375,12 @@ public class SemanticTokensVisitor extends NodeVisitor {
 
     private void handleReferences(LinePosition linePosition, int length, int type, int modifiers) {
 
-//        SemanticModel semanticModel = this.semanticTokensProvider.getSemanticModel();
-//        if (semanticModel == null) {
-//            return;
-//        }
         List<Location> locations = this.semanticTokensProvider.getSemanticModelReferences(linePosition);
-//        locations.stream().filter(location -> location.lineRange().filePath().equals(this.filePath.getFileName()))
         locations.forEach(location -> {
             LinePosition position = location.lineRange().startLine();
             SemanticToken semanticToken = new SemanticToken(position.line(), position.offset());
             if (!semanticTokens.contains(semanticToken)) {
-                semanticToken.setLength(length);
-                semanticToken.setType(type);
-                semanticToken.setModifiers(modifiers);
+                semanticToken.setProperties(length, type, modifiers);
                 semanticTokens.add(semanticToken);
             }
         });
@@ -504,18 +434,10 @@ public class SemanticTokensVisitor extends NodeVisitor {
             return modifiers;
         }
 
-        public void setLength(int length) {
+        public void setProperties(int length, int type, int modifiers) {
 
             this.length = length;
-        }
-
-        public void setType(int type) {
-
             this.type = type;
-        }
-
-        public void setModifiers(int modifiers) {
-
             this.modifiers = modifiers;
         }
 
