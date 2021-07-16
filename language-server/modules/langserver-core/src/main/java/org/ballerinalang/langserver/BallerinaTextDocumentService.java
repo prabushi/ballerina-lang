@@ -38,6 +38,7 @@ import org.ballerinalang.langserver.commons.RenameContext;
 import org.ballerinalang.langserver.commons.SignatureContext;
 import org.ballerinalang.langserver.commons.capability.LSClientCapabilities;
 import org.ballerinalang.langserver.commons.workspace.WorkspaceManager;
+import org.ballerinalang.langserver.config.LSClientConfigHolder;
 import org.ballerinalang.langserver.contexts.ContextBuilder;
 import org.ballerinalang.langserver.diagnostic.DiagnosticsHelper;
 import org.ballerinalang.langserver.exception.UserErrorException;
@@ -564,8 +565,12 @@ class BallerinaTextDocumentService implements TextDocumentService {
 
     @JsonRequest
     public CompletableFuture<SemanticTokens> semanticTokensFull(SemanticTokensParams params) {
+
         return CompletableFuture.supplyAsync(() -> {
             List<Integer> data = new ArrayList<>();
+            if (!LSClientConfigHolder.getInstance(serverContext).getConfig().isEnableSemanticHighlighting()) {
+                return new SemanticTokens(data);
+            }
             String fileUri = params.getTextDocument().getUri();
             Optional<Path> filePath = CommonUtil.getPathFromURI(fileUri);
             if (filePath.isEmpty()) {
@@ -589,19 +594,6 @@ class BallerinaTextDocumentService implements TextDocumentService {
                     module.get().getCompilation().getSemanticModel(), document.get(),
                     fileUri.substring(fileUri.lastIndexOf('/') + 1));
             semanticTokenVisitor.visitSemanticTokens(syntaxTree.rootNode());
-//            data = Arrays.asList(1, 5, 21, 1, 1, 11, 12, 21, 1, 0, 1, 18, 21, 1, 0, 14, 14, 21, 1, 0, -25, 5, 20, 1,
-//            1);
-//            // [1, 5, 21, 1, 1, 11, 12, 21, 1, 0, 1, 18, 21, 1, 0, 14, 14, 21, 1, 0, -25, 5, 20, 1, 1, 17, 12, 20, 1,
-//            // 0, 1, 18, 20, 1, 0, 7, 36, 20, 1, 0, -24, 6, 17, 8, 5, 17, 39, 17, 8, 4, -16, 6, 18, 8, 5, 9, 40, 18,
-//            8,
-//            // 4, -8, 9, 17, 12, 1, 0, 22, 9, 7, 1, 4, 11, 9, 7, 0, 5, 52, 9, 7, 0, 2, 18, 9, 7, 0, 5, 52, 9, 7, 0,
-//            -15,
-//            // 4, 8, 12, 0, 2, 8, 8, 12, 0, 4, 34, 21, 8, 1, 3, 17, 21, 8, 0, 4, 33, 20, 8, 1, 3, 17, 20, 8, 0, 6, 8,
-//            // 10, 12, 0, 0, 31, 1, 5, 0, 0, 2, 7, 5, 0, 1, 34, 1, 5, 0, 0, 2, 6, 5, 0, 5, 9, 4, 12, 1, 1, 8, 1, 8,
-//            1,
-//            // 1, 13, 1, 8, 0, 0, -9, 8, 12, 0, 1, 12, 5, 12, 1, 2, 5, 3, 3, 1, 1, 0, 1, 10, 5, 3, 33, 1, 10, 4, -3,
-//            3,
-//            // 1, 10, 5, 2, 16, 4, 12, 1, 1, 4, 10, 12, 0]
             return new SemanticTokens(data);
         });
     }
