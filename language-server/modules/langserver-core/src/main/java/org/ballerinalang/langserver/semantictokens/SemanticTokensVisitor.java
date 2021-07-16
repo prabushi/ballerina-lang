@@ -272,11 +272,9 @@ public class SemanticTokensVisitor extends NodeVisitor {
                         } else {
                             type = TokenTypes.CLASS.value;
                         }
-                        modifiers = 0;
                         break;
                     case CLASS_FIELD:
                         type = TokenTypes.PROPERTY.value;
-                        modifiers = 0;
                         break;
                     case CONSTANT:
                         type = TokenTypes.VARIABLE.value;
@@ -288,12 +286,10 @@ public class SemanticTokensVisitor extends NodeVisitor {
                         } else {
                             type = TokenTypes.VARIABLE.value;
                         }
-                        modifiers = 0;
                         break;
                     case TYPE:
                     case RECORD_FIELD:
                         type = TokenTypes.TYPE.value;
-                        modifiers = 0;
                         break;
                     case ENUM_MEMBER:
                         type = TokenTypes.ENUM_MEMBER.value;
@@ -301,38 +297,20 @@ public class SemanticTokensVisitor extends NodeVisitor {
                         break;
                     case PARAMETER:
                         type = TokenTypes.PARAMETER.value;
-                        modifiers = 0;
                         break;
                     case FUNCTION:
                         type = TokenTypes.FUNCTION.value;
-                        modifiers = 0;
                         break;
                     case METHOD:
                         type = TokenTypes.METHOD.value;
-                        modifiers = 0;
                         break;
                     default:
                         break;
                 }
-                if (type != -1 && modifiers != -1) {
-                    semanticToken.setProperties(nodeName.length(), type, modifiers);
+                if (type != -1) {
+                    semanticToken.setProperties(nodeName.length(), type, modifiers == -1 ? 0 : modifiers);
                     semanticTokens.add(semanticToken);
                 }
-            }
-        }
-    }
-
-    private void addSemanticToken(Token token, int type, int modifiers, boolean processReferences, int refType,
-                                  int refModifiers) {
-
-        LinePosition startLine = token.lineRange().startLine();
-        SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
-        if (!semanticTokens.contains(semanticToken)) {
-            int length = token.text().trim().length();
-            semanticToken.setProperties(length, type, modifiers);
-            semanticTokens.add(semanticToken);
-            if (processReferences) {
-                handleReferences(startLine, length, refType, refModifiers);
             }
         }
     }
@@ -343,7 +321,8 @@ public class SemanticTokensVisitor extends NodeVisitor {
         LinePosition startLine = node.lineRange().startLine();
         SemanticToken semanticToken = new SemanticToken(startLine.line(), startLine.offset());
         if (!semanticTokens.contains(semanticToken)) {
-            int length = node.toString().trim().length();
+            int length = node instanceof Token ? ((Token) node).text().trim().length() :
+                    node.toString().trim().length();
             semanticToken.setProperties(length, type, modifiers);
             semanticTokens.add(semanticToken);
             if (processReferences) {
